@@ -24,19 +24,19 @@ type StackFrame struct {
 	ProgramCounter uintptr
 }
 
-// NewStackFrame popoulates a stacks frame object from the program counter.
-func NewStackFrame(pc uintptr) (frame StackFrame) {
+// NewStackFrame populates a stacks frame object from the program counter.
+func NewStackFrame(programCounter uintptr) StackFrame {
 
-	frame = StackFrame{ProgramCounter: pc}
+	frame := StackFrame{ProgramCounter: programCounter}
 	if frame.Func() == nil {
-		return
+		return frame
 	}
 	frame.Package, frame.Name = packageAndName(frame.Func())
 
 	// pc -1 because the program counters we use are usually return addresses,
 	// and we want to show the line that corresponds to the function call
-	frame.File, frame.LineNumber = frame.Func().FileLine(pc - 1)
-	return
+	frame.File, frame.LineNumber = frame.Func().FileLine(programCounter - 1)
+	return frame
 
 }
 
@@ -49,7 +49,7 @@ func (frame *StackFrame) Func() *runtime.Func {
 }
 
 // String returns the stackframe formatted in the same way as go does
-// in runtime/debug.Stack()
+// in runtime/debug.Stack().
 func (frame *StackFrame) String() string {
 	str := fmt.Sprintf("%s:%d (0x%x)\n", frame.File, frame.LineNumber, frame.ProgramCounter)
 
@@ -117,6 +117,6 @@ func packageAndName(fn *runtime.Func) (string, string) {
 		name = name[period+1:]
 	}
 
-	name = strings.Replace(name, "·", ".", -1)
+	name = strings.ReplaceAll(name, "·", ".")
 	return pkg, name
 }

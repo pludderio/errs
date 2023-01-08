@@ -7,10 +7,10 @@ import (
 	"runtime"
 )
 
-// The maximum number of stackframes on any error.
-var MaxStackDepth = 50
+// MaxStackDepth is the maximum number of stackframes on any error.
+const MaxStackDepth = 50
 
-// causer allows for interoperability with pkg/errors
+// causer allows for interoperability with pkg/errors.
 type causer interface {
 	Cause() error
 }
@@ -39,7 +39,7 @@ func new(e interface{}) *Error {
 	}
 
 	stack := make([]uintptr, MaxStackDepth)
-	length := runtime.Callers(2, stack[:])
+	length := runtime.Callers(2, stack)
 	return &Error{
 		Err:    err,
 		stacks: stack[:length],
@@ -67,14 +67,14 @@ func wrap(e interface{}, skip int) *Error {
 	}
 
 	stack := make([]uintptr, MaxStackDepth)
-	length := runtime.Callers(2+skip, stack[:])
+	length := runtime.Callers(2+skip, stack)
 	return &Error{
 		Err:    err,
 		stacks: stack[:length],
 	}
 }
 
-// wrapSkip calls errors.wrap, in case you want to skip a different amount
+// wrapSkip calls errors.wrap, in case you want to skip a different amount.
 func wrapSkip(err interface{}, skip int) *Error {
 	if err == nil {
 		return nil
@@ -108,8 +108,8 @@ func wrapPrefix(e interface{}, prefix string, skip int) *Error {
 		Err:    err.Err,
 		stacks: err.stacks,
 		prefix: prefix,
+		frames: make([]StackFrame, len(err.frames)),
 	}
-
 }
 
 // errorf creates a new error with the given message. You can use it
@@ -131,7 +131,7 @@ func (err *Error) Error() string {
 }
 
 // Stack returns the callstack formatted the same way that go does
-// in runtime/debug.Stack()
+// in runtime/debug.Stack().
 func (err *Error) Stack() []byte {
 	buf := bytes.Buffer{}
 

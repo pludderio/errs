@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+const (
+	start = iota
+	seek
+	parsing
+	done
+)
+
 type uncaughtPanic struct{ message string }
 
 func (p uncaughtPanic) Error() string {
@@ -16,37 +23,33 @@ func (p uncaughtPanic) Error() string {
 func ParsePanic(text string) (*Error, error) {
 	lines := strings.Split(text, "\n")
 
-	state := "start"
+	state := start
 
 	var message string
 	var stack []StackFrame
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-
-		if state == "start" {
-			if strings.HasPrefix(line, "panic: ") {
+		switch {
+		case state == start:
+			if hasPanicPrefix(line) {
 				message = strings.TrimPrefix(line, "panic: ")
-				state = "seek"
-			} else {
-				return nil, errorf("bugsnag.panicParser: Invalid line (no prefix): %s", line)
+				state = seek
+				continue
 			}
-
-		} else if state == "seek" {
-			if strings.HasPrefix(line, "goroutine ") && strings.HasSuffix(line, "[running]:") {
-				state = "parsing"
+			return nil, errorf("bugsnag.panicParser: Invalid line (no prefix): %s", line)
+		case state == seek:
+			if hasGoroutinePrefix(line) && hasRunningSuffix(line) {
+				state = parsing
+				continue
 			}
-
-		} else if state == "parsing" {
+		case state == parsing:
 			if line == "" {
-				state = "done"
+				state = done
 				break
 			}
-			createdBy := false
-			if strings.HasPrefix(line, "created by ") {
-				line = strings.TrimPrefix(line, "created by ")
-				createdBy = true
-			}
+			createdBy := hasCreatedByPrefix(line)
+			line = strings.TrimPrefix(line, "created by ")
 
 			i++
 
@@ -61,16 +64,31 @@ func ParsePanic(text string) (*Error, error) {
 
 			stack = append(stack, *frame)
 			if createdBy {
-				state = "done"
+				state = done
 				break
 			}
+		case state == done || state == parsing:
+			return &Error{Err: uncaughtPanic{message}, frames: stack}, nil
 		}
-	}
 
-	if state == "done" || state == "parsing" {
-		return &Error{Err: uncaughtPanic{message}, frames: stack}, nil
 	}
 	return nil, errorf("could not parse panic: %v", text)
+}
+
+func hasCreatedByPrefix(line string) bool {
+	return strings.HasPrefix(line, "created by ")
+}
+
+func hasPanicPrefix(line string) bool {
+	return strings.HasPrefix(line, "panic: ")
+}
+
+func hasGoroutinePrefix(line string) bool {
+	return strings.HasPrefix(line, "goroutine ")
+}
+
+func hasRunningSuffix(line string) bool {
+	return strings.HasSuffix(line, "[running]:")
 }
 
 // The lines we're passing look like this:
@@ -87,16 +105,16 @@ func parsePanicFrame(name string, line string, createdBy bool) (*StackFrame, err
 	}
 	pkg := ""
 
-	if lastslash := strings.LastIndex(name, "/"); lastslash >= 0 {
-		pkg += name[:lastslash] + "/"
-		name = name[lastslash+1:]
+	if lastSlash := strings.LastIndex(name, "/"); lastSlash >= 0 {
+		pkg += name[:lastSlash] + "/"
+		name = name[lastSlash+1:]
 	}
 	if period := strings.Index(name, "."); period >= 0 {
 		pkg += name[:period]
 		name = name[period+1:]
 	}
 
-	name = strings.Replace(name, "·", ".", -1)
+	name = strings.ReplaceAll(name, "·", ".")
 
 	if !strings.HasPrefix(line, "\t") {
 		return nil, errorf("bugsnag.panicParser: Invalid line (no tab): %s", line)
